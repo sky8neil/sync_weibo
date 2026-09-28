@@ -138,6 +138,38 @@ print(result)  # {'fid': '...', 'server_msg': '...', 'verified': True}
 - `state/tw_cookies.json` — Twitter/X 会话 cookie（600 权限）
 - `evidence/` — 逆向侦察记录与取证文件（2026-09）
 
+## 部署与换机（state 凭据怎么带）
+
+所有凭据与运行时状态都集中在 `state/`（目录 700、文件 600；已被 `.gitignore` 整体排除，**不会进仓库**）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `state/credentials.json` | 饭否账号密码 |
+| `state/session.json` | 饭否会话（约 30 天，过期自动重登） |
+| `state/akkoma_token.txt` | Akkoma API token |
+| `state/tw_cookies.json` | X（auth_token + ct0） |
+| `state/service_token.txt` | 本服务鉴权 token（插件配置用） |
+
+换 VPS / 多机部署时，任选一种同步方式：
+
+```bash
+# 方式 A：rsync 直传（推荐，两机之间走 SSH）
+rsync -avz /home/fanfou-sender/state/ root@新主机:/home/fanfou-sender/state/
+ssh root@新主机 'chmod 700 /home/fanfou-sender/state && chmod 600 /home/fanfou-sender/state/*'
+
+# 方式 B：加密打包（需要经过不可信通道时）
+tar czf - state | openssl enc -aes-256-cbc -pbkdf2 -salt -out state.tar.gz.enc
+# 新机解密：openssl enc -d -aes-256-cbc -pbkdf2 -in state.tar.gz.enc | tar xzf -
+
+# 方式 C：不搬，在新机重新领取
+#   Akkoma：实例设置页新建一个 token
+#   X：浏览器重新导出 auth_token + ct0
+#   饭否：带着 credentials.json 首次运行会自动登录（或手动重建该文件）
+#   服务 token：首次启动自动生成 —— 记得把新值同步给插件「设置」页
+```
+
+> ⚠ 多机同时使用同一套 X cookie 有风控风险；建议固定一台机器、低频使用。
+
 ## 安全提示
 
 账号密码以明文存于 `state/credentials.json`（600 权限）。
