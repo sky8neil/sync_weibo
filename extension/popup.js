@@ -1,6 +1,6 @@
 // 双发小助手 — popup 逻辑
 // 功能：实时字数、标签（## 插入）、图片（压缩 webp ≤2MB）、发送状态条、日志、设置
-const DEFAULTS = { serviceUrl: 'http://23.106.45.229:8788', token: '' };
+const DEFAULTS = { serviceUrl: 'http://199.47.241.134:8788', token: '' };
 const FALLBACK_LIMITS = {
   fanfou_max_chars: 140,
   akkoma_max_chars: 5000,

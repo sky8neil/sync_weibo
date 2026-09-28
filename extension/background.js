@@ -1,6 +1,6 @@
 // 双发小助手 — 后台 Service Worker
 // 职责：真正执行发送（弹窗关闭也继续）、系统通知（chrome.notifications）、错误日志持久化
-const DEFAULTS = { serviceUrl: 'http://23.106.45.229:8788', token: '' };
+const DEFAULTS = { serviceUrl: 'http://199.47.241.134:8788', token: '' };
 const NOTIF_ID = 'multipost-status';
 let sending = false;
 const queue = [];

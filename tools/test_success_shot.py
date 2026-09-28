@@ -51,7 +51,7 @@ with sync_playwright() as p:
     page.goto(f'chrome-extension://{EXT_ID}/popup.html')
     page.wait_for_timeout(1200)
     page.evaluate("(c) => new Promise(r => chrome.storage.sync.set(c, r))",
-                  {'serviceUrl': 'http://23.106.45.229:8788', 'token': TOKEN})
+                  {'serviceUrl': 'http://199.47.241.134:8788', 'token': TOKEN})
     page.evaluate("([st, lg]) => new Promise(r => chrome.storage.local.set({lastState: st, log: lg}, r))",
                   [state, logseed])
     page.reload()
