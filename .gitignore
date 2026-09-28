@@ -1,0 +1,37 @@
+# ===== 凭据与运行时状态（绝不入库）=====
+state/
+
+# Python 虚拟环境（Twitter 通道，本地重建，见 README）
+.venv-tw/
+
+# 扩展签名私钥（仅本地保留，勿外传）
+extension-key.pem
+
+# ===== evidence：只公开「结论性文档 + 截图」 =====
+# 以下为含凭据 / session 的早期侦察脚本与抓包文件，仅存服务器本地
+evidence/ajax_test.py
+evidence/browser_delete_capture.py
+evidence/browser_delete_capture2.py
+evidence/cookie_reuse_test.py
+evidence/delete_check2.py
+evidence/delete_correct.py
+evidence/delete_test.py
+evidence/emoji_status.html
+evidence/emoji_test.py
+evidence/home.html
+evidence/home_probe.py
+evidence/limit_test.py
+evidence/login_test1.py
+evidence/post_test.py
+evidence/profile_after_post.html
+evidence/profile_check2.html
+evidence/resp_nocaptcha.html
+evidence/saved_session.json
+evidence/session_cookies.json
+evidence/verify_check.py
+# 第三方站点脚本（版权原因不公开）
+evidence/fanfou.js
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]

@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "双发小助手（饭否 + Akkoma + X）",
+  "version": "0.4.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5pfReFTBo0i6eTxEEKfz+pfX1K6cJ+Hq335puP2a3V4PhRm4D1uqDy8T/Fay2yHQWJS0KumenyDuW9SNf811mMoXHD58klvqXYlq/HEjrtBFIfCAJKzLzEyixLFeksVaNXdRUZkm/dZLYacWRccHFcgqvLgRA1VK3KiRbMGvZsRXZTEOw+x0blP7RE9Shp9LDqyxQ3NS0RhDE7xBCw5gfTstHmfwmXG3qkmfeNTY7ndTS64xzrFydl24dVSxZgRW0gCHKiFoRksc4t9J44LI0mPYZXoHuEm82MhV0dKu3tL+MVdeE+YD+/OvK5myel9aWHjms8kLkyZKcQGNThDtcwIDAQAB",
+  "description": "一键把消息发到饭否、自建 Akkoma 和 Twitter/X：支持图片（自动压 webp，Akkoma/X 均可带图）、#标签、实时字数、发送通知与错误日志。",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "双发小助手"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "notifications"],
+  "host_permissions": ["http://23.106.45.229/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

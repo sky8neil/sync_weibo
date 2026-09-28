@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>双发小助手 — 设置</title>
+<style>
+  body { max-width: 560px; margin: 48px auto; padding: 0 20px; font: 15px/1.7 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: #667085; margin: 0 0 24px; font-size: 13px; }
+  label { display: block; font-weight: 600; margin: 18px 0 6px; }
+  input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d0d5dd; border-radius: 8px; font: inherit; }
+  input:focus { outline: 2px solid #93b4f5; border-color: transparent; }
+  .row { display: flex; gap: 10px; margin-top: 24px; }
+  button { padding: 9px 18px; border: 0; border-radius: 8px; font: 600 14px/1 inherit; cursor: pointer; }
+  #save { background: #2f6fe0; color: #fff; }
+  #test { background: #eef2f7; color: #222; }
+  #status { margin-top: 18px; font-size: 13.5px; white-space: pre-wrap; }
+  #status.ok { color: #157f3d; }
+  #status.err { color: #c0281e; }
+  .hint { font-size: 12.5px; color: #667085; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <h1>双发小助手 — 设置</h1>
+  <p class="sub">配置后端服务地址与 token（部署在服务器上的 multipost-api）。</p>
+
+  <label for="serviceUrl">服务地址</label>
+  <input id="serviceUrl" placeholder="http://23.106.45.229:8788">
+  <div class="hint">例如 http://23.106.45.229:8788 — 末尾的 / 可省略</div>
+
+  <label for="token">Token</label>
+  <input id="token" placeholder="服务 token（state/service_token.txt 里的那串）">
+  <div class="hint">在服务器 /home/fanfou-sender/state/service_token.txt 中查看</div>
+
+  <div class="row">
+    <button id="save">保存</button>
+    <button id="test">测试连接</button>
+  </div>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

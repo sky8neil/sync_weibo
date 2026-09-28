@@ -1,0 +1,14 @@
+[Unit]
+Description=Multipost API (fanfou + akkoma + twitter HTTP service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/fanfou-sender
+ExecStart=/usr/bin/python3 /home/fanfou-sender/fanfou_service.py --host 0.0.0.0 --port 8788
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
