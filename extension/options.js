@@ -1,5 +1,5 @@
 // 双发小助手 — 设置页逻辑
-const DEFAULTS = { serviceUrl: 'http://199.47.241.134:8788', token: '' };
+const DEFAULTS = { serviceUrl: 'http://23.106.45.229:8788', token: '' };
 const $ = (id) => document.getElementById(id);
 
 function setStatus(text, cls) {

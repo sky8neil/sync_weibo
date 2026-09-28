@@ -8,11 +8,13 @@
 
   登录    GET  /login 取 token → POST /login (auto_login=on) → 长效 Cookie（约 30 天）
   发消息  POST /home   action=msg.post  → JSON {"status":1,...}（>140 字服务端会静默截断）
-  核实    GET  /~<user> 个人主页（服务端渲染）→ 提取 ffid（消息 ID）
-  删除    POST /home   action=msg.del&msg=<id> → JSON {"status":1,...}
+  发图片  POST /home/upload  action=photo.upload（multipart；字段 picture+desc；
+          仅 jpg/png/gif、单张 ≤2MB；webp 自动转 jpg；2026-09 实测跑通）
+  核实    GET  /~<user> 个人主页（服务端渲染）→ 提取 ffid（消息 ID；照片帖同样带 ffid）
+  删除    POST /home   action=msg.del&msg=<id> → JSON {"status":1,...}（照片帖同用）
 
 CLI 用法:
-  fanfou_sender.py send "消息内容" [--truncate] [--no-verify]
+  fanfou_sender.py send "消息内容" [--truncate] [--no-verify] [--image 图片路径]
   fanfou_sender.py send -            # 从 stdin 读入内容
   fanfou_sender.py status
   fanfou_sender.py login [--force]
@@ -41,11 +43,15 @@ BASE = "https://fanfou.com"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 MAX_LEN = 140            # 饭否单条消息上限（服务端按码点截断）
+MAX_IMAGE_BYTES = 2 * 1024 * 1024   # 饭否图片上限（发帖表单标注：最大 2MB）
 DEFAULT_TIMEOUT = 30
 
 _USER_TOP_RE = re.compile(r'id="user_top">(.*?)</div>', re.S)
 _LI_RE = re.compile(r"<li\b.*?</li>", re.S)
-_CONTENT_RE = re.compile(r'<span class="content">(.*?)</span>', re.S)
+# 消息正文：照片帖的 content span 里还有嵌套 <span></span>，
+# 所以用「到 <span class="stamp"> 之前」作为边界（stamp 恒随正文出现）。
+_CONTENT_RE = re.compile(r'<span class="content">(.*?)</span>\s*<span class="stamp"', re.S)
+_CONTENT_RE_LOOSE = re.compile(r'<span class="content">(.*?)</span>', re.S)
 _FFID_RE = re.compile(r'ffid="([^"]+)"')
 _TOKEN_RE = re.compile(r'name="token" value="([0-9a-zA-Z]+)"')
 
@@ -289,14 +295,94 @@ class FanfouClient:
             raise _Retryable(f"响应不是 JSON：{r.text[:120]!r}")
         return j
 
-    def send(self, content: str, truncate: bool = False, verify: bool = True) -> dict:
-        """发送消息。
+    # ---------------- 图片（照片帖）----------------
 
+    def _prepare_image(self, data: bytes, mime: str = ""):
+        """规整为饭否可收的图片（jpg/png/gif、≤2MB；webp 自动转 jpg）。
+
+        返回 (data, mime, filename)。
+        """
+        if not data:
+            raise UsageError("图片内容为空")
+        head = data[:12]
+        if head[:6] in (b"GIF87a", b"GIF89a"):
+            fmt, mime, fname = "gif", "image/gif", "photo.gif"
+        elif head[:8] == b"\x89PNG\r\n\x1a\n":
+            fmt, mime, fname = "png", "image/png", "photo.png"
+        elif head[:3] == b"\xff\xd8\xff":
+            fmt, mime, fname = "jpg", "image/jpeg", "photo.jpg"
+        elif head[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            fmt, mime, fname = "webp", "image/webp", "photo.jpg"
+        else:
+            raise UsageError("不认识的图片格式（支持 jpg/png/gif；webp 会自动转 jpg）")
+        if fmt == "webp" or len(data) > MAX_IMAGE_BYTES:
+            self._log(f"图片 {fmt} {len(data)//1024}KB → 转 JPEG 压缩")
+            data = self._transcode_jpeg(data)
+            fmt, mime, fname = "jpg", "image/jpeg", "photo.jpg"
+        return data, mime, fname
+
+    def _transcode_jpeg(self, data: bytes) -> bytes:
+        """PIL：转 JPEG 并压到 ≤2MB（先调质量，再缩边长）。"""
+        try:
+            from PIL import Image
+        except ImportError:
+            raise FanfouError("需要 Pillow 才能转/压图片（pip install Pillow）")
+        import io
+        im = Image.open(io.BytesIO(data))
+        if getattr(im, "is_animated", False):
+            im.seek(0)
+        im = im.convert("RGB")
+        for q in (85, 75, 65, 55, 45):
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=q, optimize=True)
+            if buf.tell() <= MAX_IMAGE_BYTES:
+                return buf.getvalue()
+        w, h = im.size
+        while max(w, h) > 320:
+            w, h = max(1, int(w * 0.8)), max(1, int(h * 0.8))
+            im = im.resize((w, h))
+            for q in (75, 60):
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=q, optimize=True)
+                if buf.tell() <= MAX_IMAGE_BYTES:
+                    return buf.getvalue()
+        raise FanfouError("图片压不进饭否 2MB 上限，放弃（请换一张）")
+
+    def _upload_photo(self, token: str, desc: str, data: bytes, mime: str, fname: str) -> dict:
+        """上传照片帖（multipart）。响应是整页 HTML，成功与否以主页核实为准。"""
+        try:
+            r = self.s.post(
+                f"{BASE}/home/upload",
+                data={"token": token, "ajax": "yes", "action": "photo.upload", "desc": desc},
+                files={"picture": (fname, data, mime)},
+                headers={"X-Requested-With": "XMLHttpRequest"},
+                timeout=max(self.timeout, 60),
+            )
+        except requests.RequestException as e:
+            raise _Retryable(f"网络错误：{e}")
+        if r.status_code != 200:
+            raise _Retryable(f"HTTP {r.status_code}")
+        if self._is_login_page(r.text):
+            self._force_relogin = True
+            raise _Retryable("会话失效（响应为登录页）")
+        return {"status": 1, "msg": "照片已提交（以主页核实为准）"}
+
+    # ---------------- 发送 ----------------
+
+    def send(self, content: str, truncate: bool = False, verify: bool = True,
+             image: bytes = None, image_mime: str = "") -> dict:
+        """发送消息（可带一张图片）。
+
+        image: 图片字节（可选）。饭否仅收 jpg/png/gif 且 ≤2MB；webp 自动转 jpg。
         返回 {"fid": 消息ID或None, "server_msg": 服务器提示, "verified": True/False/None}
         verified: True=主页核实到; False=未核实到; None=跳过核实
         """
         content = content.strip()
-        if not content:
+        image_data = None
+        image_fname = ""
+        if image:
+            image_data, image_mime, image_fname = self._prepare_image(image, image_mime)
+        elif not content:
             raise UsageError("消息内容为空")
         if len(content) > MAX_LEN:
             if not truncate:
@@ -306,7 +392,8 @@ class FanfouClient:
             self._log(f"内容 {len(content)} 字，截断为 {MAX_LEN} 字")
             content = content[:MAX_LEN]
 
-        attempts = 2 if verify else 1
+        do_verify = bool(verify and content)   # 纯图（无文字）无法按内容核实
+        attempts = 2 if do_verify else 1
         last_err = None
         for attempt in range(1, attempts + 1):
             try:
@@ -315,15 +402,18 @@ class FanfouClient:
                 if not token:
                     self._save_debug("home-no-token", home)
                     raise FanfouError("/home 页面未找到 token（饭否可能改版）")
-                j = self._post_msg(token, content)
+                if image_data is not None:
+                    j = self._upload_photo(token, content, image_data, image_mime, image_fname)
+                else:
+                    j = self._post_msg(token, content)
                 if j.get("status") != 1:
                     raise FanfouError(f"发送被拒绝：{j.get('msg')}")
                 server_msg = str(j.get("msg") or "")
-                fid = self.verify_visible(content) if verify else None
-                return {"fid": fid, "server_msg": server_msg, "verified": (fid is not None) if verify else None}
+                fid = self.verify_visible(content) if do_verify else None
+                return {"fid": fid, "server_msg": server_msg, "verified": (fid is not None) if do_verify else None}
             except _Retryable as e:
                 last_err = e
-                if verify:
+                if do_verify:
                     fid = self.verify_visible(content)
                     if fid:
                         return {"fid": fid, "server_msg": "(重试前核实：消息已在主页)", "verified": True}
@@ -350,7 +440,7 @@ class FanfouClient:
         """从主页 HTML 提取 [(ffid, 归一化内容), ...]（按页面顺序，最新在前）。"""
         out = []
         for li in _LI_RE.findall(page_html):
-            cm = _CONTENT_RE.search(li)
+            cm = _CONTENT_RE.search(li) or _CONTENT_RE_LOOSE.search(li)
             if not cm:
                 continue
             fm = _FFID_RE.search(li)
@@ -428,9 +518,17 @@ def cmd_send(a) -> int:
     content = a.text
     if content == "-":
         content = sys.stdin.read()
+    image = None
+    if getattr(a, "image", None):
+        try:
+            with open(a.image, "rb") as f:
+                image = f.read()
+        except OSError as e:
+            print(f"参数错误：读不到图片 {a.image}（{e}）", file=sys.stderr)
+            return 2
     client = _client_from_args(a)
     try:
-        res = client.send(content, truncate=a.truncate, verify=not a.no_verify)
+        res = client.send(content, truncate=a.truncate, verify=not a.no_verify, image=image)
     except UsageError as e:
         print(f"参数错误：{e}", file=sys.stderr)
         return 2
@@ -531,6 +629,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", help="消息内容，或 - 表示从标准输入读取")
     sp.add_argument("--truncate", action="store_true", help="超过 140 字时截断发送（默认拒绝）")
     sp.add_argument("--no-verify", action="store_true", help="跳过个人主页核实（不推荐，无法发现审核异常）")
+    sp.add_argument("--image", help="随消息发一张图片（jpg/png/gif ≤2MB；webp 自动转 jpg）")
     sp.set_defaults(func=cmd_send)
 
     sp = sub.add_parser("delete", parents=[common], help="删除一条消息")

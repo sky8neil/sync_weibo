@@ -1,8 +1,9 @@
 // 双发小助手 — popup 逻辑
 // 功能：实时字数、标签（## 插入）、图片（压缩 webp ≤2MB）、发送状态条、日志、设置
-const DEFAULTS = { serviceUrl: 'http://199.47.241.134:8788', token: '' };
+const DEFAULTS = { serviceUrl: 'http://23.106.45.229:8788', token: '' };
 const FALLBACK_LIMITS = {
   fanfou_max_chars: 140,
+  fanfou_max_images: 1,
   akkoma_max_chars: 5000,
   max_images_per_post: 16,
   per_image_limit_bytes: 2097152,
@@ -180,11 +181,10 @@ function renderThumbs() {
     box.appendChild(d);
   });
   const total = images.reduce((a, b) => a + b.sizeKB, 0);
-  const twMax = LIMITS.twitter_max_images || 4;
   let info = images.length
-    ? images.length + '/' + LIMITS.max_images_per_post + ' 张 · 共 ' + (total / 1024).toFixed(1) + 'MB · webp'
-    : '配图：Akkoma ≤16 张 / X ≤4 张 · 自动压 webp ≤2MB';
-  if (images.length > twMax) info += '（X 只发前 ' + twMax + ' 张）';
+    ? images.length + ' 张 · 共 ' + (total / 1024).toFixed(1) + 'MB · webp'
+    : '配图：饭否 1 / Akkoma 16 / X 4 张 · 自动压 webp ≤2MB';
+  if (images.length >= 2) info += '（第1张→饭否，其余→Akkoma/X）';
   $('imgInfo').textContent = info;
 }
 
@@ -225,7 +225,7 @@ function renderStatus(state) {
     sub.appendChild(document.createTextNode(text));
   };
   if (res.fanfou) {
-    if (res.fanfou.ok) addBit('饭否 id=' + (res.fanfou.id || '✓') + (res.fanfou.truncated ? '（已截断）' : ''));
+    if (res.fanfou.ok) addBit('饭否 ✓' + (res.fanfou.media_count ? '（1 图）' : '') + (res.fanfou.truncated ? '（已截断）' : ''));
     else addBit('饭否 ✗ ' + String(res.fanfou.error || '').slice(0, 90));
   }
   if (res.akkoma) {
@@ -308,10 +308,6 @@ async function send(to) {
   const tags = parseTags($('tags').value);
   if (!text && !images.length) {
     flashStatus('先写点内容或加张图片', 'error');
-    return;
-  }
-  if (images.length && to === 'fanfou') {
-    flashStatus('图片不支持饭否：请改选「发 Akkoma / 发 Twitter / 同时发」或去掉图片', 'error');
     return;
   }
   const cfg = await getConfig();

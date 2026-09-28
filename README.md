@@ -85,8 +85,8 @@ python3 fanfou_service.py --host 0.0.0.0 --port 8788   # 对外暴露必须显�
 
 - `GET /health` 探活；`GET /send?token=..&text=..&to=..` 直接测试；`POST /send` 支持 JSON / 表单 / 纯文本 body；
 - **`to` 参数**：`fanfou`（默认）/ `akkoma` / `twitter` / `both`（饭否+Akkoma）/ `all`（三平台），也支持组合（如 `akkoma,twitter`）；
-- **图片**：`"images":[{"name","mime","data(base64)"}]` —— Akkoma ≤16 张/次、X ≤4 张（超出只发前 4 张到 X）；≤2MB/张（插件端压 webp）；
-- **标签**：`"tags":["摄影","日常"]` —— 追加给 Akkoma 与 X（`#标签` 形式、自动去重）；`GET /limits` 查限制；
+- **图片**：`"images":[{"name","mime","data(base64)"}]` —— 三平台均支持：饭否 1 张（自动转 jpg）、Akkoma ≤16、X ≤4；多图分流：同时发 ≥2 张时第 1 张→饭否、其余→Akkoma/X；
+- **标签**：`"tags":["摄影","日常"]` —— 追加给 Akkoma 与 X（`#标签` 形式、自动去重）；饭否帖会自动去掉 #标签；`GET /limits` 查限制；
 - **Twitter/X**：支持图片（≤4 张）、按权重限 280（中文约 140 字）；凭据 `state/tw_cookies.json`（twifork + `.venv-tw`）；
 - 消息字段兼容 `text / message / content / notes / selection / customFields.message` 等（适配常见 webhook 插件）；
 - 除探活/帮助页外均需 token（`state/service_token.txt`，首次启动自动生成）；Akkoma 凭据 `state/akkoma_token.txt`；Twitter 凭据 `state/tw_cookies.json`；
@@ -102,8 +102,8 @@ python3 fanfou_service.py --host 0.0.0.0 --port 8788   # 对外暴露必须显�
 
 ## Chrome 扩展「双发小助手」
 
-`extension/` 是配套的 Chrome 扩展（MV3，v0.4）：输入框 + 五个按钮 —— 发饭否 / 发 Akkoma / 发 Twitter / Akkoma + X / 同时发（3 平台）；
-外加**实时字数、图片（Akkoma + X，自动压 webp ≤2MB/张）、#标签（Akkoma+X）、发送系统通知、错误日志**。
+`extension/` 是配套的 Chrome 扩展（MV3，v0.4.2）：输入框 + 五个按钮 —— 发饭否 / 发 Akkoma / 发 Twitter / Akkoma + X / 同时发（3 平台）；
+外加**实时字数、图片（三平台，自动压 webp ≤2MB；多图分流：第1张→饭否、其余→Akkoma/X）、#标签（Akkoma/X；饭否自动去 #）、发送系统通知、错误日志**。
 
 - 安装：`chrome://extensions/` → 打开「开发者模式」→「加载已解压的扩展程序」→ 选 `extension/` 目录；
 - 配置：扩展设置页填「服务地址 + token」；

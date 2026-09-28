@@ -15,15 +15,17 @@
        正文支持：JSON、表单、纯文本 body；可选字段 to / target、tags、images
   GET  /status?token=..             两端账号状态 + 平台限制（limits）+ 最近发送记录
 
-图片（Akkoma + Twitter/X；饭否不支持）：
+图片（三平台均支持）：
   * JSON 里 "images": [{"name":"a.webp","mime":"image/webp","data":"<base64>"}]
     也接受 dataURL（"data:image/webp;base64,...."）或省略 mime（默认 image/webp）；
-  * 插件端已压好再传：webp、每张 ≤2MB；Akkoma ≤16 张/次（实测），X ≤4 张（超出自动只发前 4 张）；
+  * 插件端已压好再传：webp、每张 ≤2MB；饭否 1 张（自动转 jpg）、Akkoma ≤16 张（实测）、X ≤4 张；
+  * 多图分流：同时发且 ≥2 张时，第 1 张 → 饭否，其余 → Akkoma/X（用户定稿规则）；
   * 服务端会按同一套限制复核，不合规直接 400 并说明原因。
 
 标签（tags）：
   * "tags": ["科技","日常"] 或 "科技 日常"（逗号/空格/#分隔均可）；
-  * 追加给 Akkoma 与 Twitter（#标签 形式加在结尾；已在正文里的不重复追加），饭否不追加。
+  * 追加给 Akkoma 与 Twitter（#标签 形式加在结尾；已在正文里的不重复追加）；
+    饭否不追加，且饭否帖中的 #标签会被自动去掉（用户规则）。
 
 返回（全部成功）: {"ok": true, "target": "both", "results": {...}, "warnings": [...]}
 失败/部分失败   : {"ok": false, "results": {...}}（HTTP 502，results 里带各自错误）
@@ -90,6 +92,9 @@ LIMITS = {
     "twitter_note": "X 按权重计字数：中文/全角/emoji 计 2、西文计 1；280 权重 ≈ 140 个汉字",
     "twitter_max_images": MAX_TW_IMAGES,
     "twitter_upload_limit_bytes": 5_242_880,
+    "fanfou_max_images": 1,
+    "fanfou_image_limit_bytes": 2_097_152,
+    "fanfou_image_note": "饭否仅收 jpg/png/gif、单张 ≤2MB；webp 自动转 jpg；多图时第 1 张发饭否、其余发 Akkoma/X",
     "tested_at": "2026-09-28",
 }
 
@@ -173,6 +178,20 @@ def append_tags(text: str, tags):
     return text + sep + " ".join("#" + t for t in missing), missing
 
 
+_HASHTAG_RE = re.compile(r"#[^\s#，。！？；：、,.!?;:’‘“”'\"()（）\[\]【】<>《》]+")
+
+
+def strip_hashtags(text: str):
+    """去掉 #标签（用户规则：饭否帖不带 ##）。返回 (新文本, 去掉个数)。"""
+    found = _HASHTAG_RE.findall(text or "")
+    if not found:
+        return (text or ""), 0
+    out = _HASHTAG_RE.sub("", text)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r" *\n *", "\n", out)
+    return out.strip(), len(found)
+
+
 def parse_images(raw):
     """校验并解码图片数组。返回 (列表, 错误信息)。
 
@@ -188,7 +207,7 @@ def parse_images(raw):
     for i, item in enumerate(raw, 1):
         if not isinstance(item, dict):
             return None, f"第 {i} 张格式错误（应为对象）"
-        data = item.get("data") or item.get("base64") or item.get("content")
+        data = item.get("data") or item.get("base64") or item.get("b64") or item.get("content")
         if not isinstance(data, str) or not data:
             return None, f"第 {i} 张缺少 data（base64）"
         mime = str(item.get("mime") or item.get("type") or "").strip().lower()
@@ -502,22 +521,37 @@ class Handler(BaseHTTPRequestHandler):
         if not text and not images:
             self._json(400, {"ok": False, "error": "没找到消息文本（可用 text/message/content/notes 等字段，或纯文本 body）"})
             return
-        if images and target == "fanfou":
-            self._json(400, {"ok": False, "error": "饭否不支持图片：请改选「发 Akkoma / 发 Twitter / 同时发」，或去掉图片"})
-            return
-
         platforms = target.split("+")
         results = {}
         warnings = []
+
+        # 多图分流（用户定稿规则）：同时发且 ≥2 张图 → 第 1 张发饭否，其余发 Akkoma/X
+        fan_image = None
+        rest_images = images
+        if images and "fanfou" in platforms:
+            if len(images) >= 2:
+                fan_image, rest_images = images[0], images[1:]
+                warnings.append("多图分流：第 1 张 → 饭否；其余 → Akkoma"
+                                + ("/X" if "twitter" in platforms else ""))
+            else:
+                fan_image = images[0]
+
         if "fanfou" in platforms:
-            truncated = len(text) > MAX_LEN
+            fan_text, removed = strip_hashtags(text)
+            truncated = len(fan_text) > MAX_LEN
             try:
                 with self.svc.lock:
-                    res = self.svc.client.send(text[:MAX_LEN], truncate=True)
+                    res = self.svc.client.send(
+                        fan_text[:MAX_LEN], truncate=True,
+                        image=(fan_image["data"] if fan_image else None),
+                        image_mime=((fan_image or {}).get("mime") or "image/jpeg"),
+                    )
                 fr = {"ok": True, "id": res["fid"], "verified": res["verified"],
                       "truncated": truncated, "msg": res["server_msg"]}
-                if images:
-                    fr["images_skipped"] = True
+                if fan_image is not None:
+                    fr["media_count"] = 1
+                if removed:
+                    fr["tags_removed"] = removed
                 results["fanfou"] = fr
             except (UsageError, FanfouError, requests.RequestException) as e:
                 results["fanfou"] = {"ok": False, "error": str(e)}
@@ -529,7 +563,7 @@ class Handler(BaseHTTPRequestHandler):
                 ak_text, applied_tags = append_tags(text, tags)
                 media_ids = []
                 up_err = None
-                for i, im in enumerate(images, 1):
+                for i, im in enumerate(rest_images, 1):
                     try:
                         with self.svc.lock:
                             up = self.svc.akkoma.upload_media(im["data"], im["name"], im["mime"])
@@ -549,7 +583,7 @@ class Handler(BaseHTTPRequestHandler):
                         results["akkoma"] = {"ok": False, "error": str(e)}
 
         if "twitter" in platforms:
-            tw_images = images[:MAX_TW_IMAGES]
+            tw_images = rest_images[:MAX_TW_IMAGES]
             tw_text, tw_tags = append_tags(text, tags)
             if not tw_text.strip() and not tw_images:
                 results["twitter"] = {"ok": False, "error": "推文内容为空"}
@@ -569,9 +603,7 @@ class Handler(BaseHTTPRequestHandler):
                     except (TwitterError, subprocess.SubprocessError) as e:
                         results["twitter"] = {"ok": False, "error": f"Twitter 通道失败：{e}"}
 
-        if images and "fanfou" in platforms:
-            warnings.append("饭否不支持图片：本次饭否仅发文字（图片发到 Akkoma / X）")
-        if ("twitter" in platforms and len(images) > MAX_TW_IMAGES
+        if ("twitter" in platforms and len(rest_images) > MAX_TW_IMAGES
                 and results.get("twitter", {}).get("ok")):
             warnings.append(f"X 单帖最多 {MAX_TW_IMAGES} 张图：本次只发前 {MAX_TW_IMAGES} 张到 X（其余仅发 Akkoma）")
 
@@ -581,7 +613,7 @@ class Handler(BaseHTTPRequestHandler):
             payload["warnings"] = warnings
         if target == "fanfou" and "fanfou" in results:
             fr = results["fanfou"]
-            for k in ("id", "verified", "truncated", "msg"):
+            for k in ("id", "verified", "truncated", "msg", "media_count", "tags_removed"):
                 if k in fr:
                     payload[k] = fr[k]
             if not fr["ok"]:
@@ -653,9 +685,10 @@ code{background:#f4f4f4;padding:2px 6px;border-radius:4px}pre{background:#f4f4f4
 Content-Type: application/json
 
 {"token": "&lt;token&gt;", "text": "要发的消息", "to": "both"}</pre>
-<p><code>to</code> 可选 <code>fanfou</code>（默认）/ <code>akkoma</code> / <code>twitter</code> / <code>both</code>（饭否+Akkoma）/ <code>all</code>（三平台全发）。</p>
-<p>Twitter（X）：支持图片（≤4 张）；正文按权重计 280（中文约 140 字）；#标签 同样会追加。</p>
-<h3>带图 + 标签（Akkoma 与 X 支持；饭否不支持图片）</h3>
+<p><code>to</code> 可选 <code>fanfou</code>（默认）/ <code>akkoma</code> / <code>twitter</code> / <code>both</code>（饭否+Akkoma）/ <code>all</code>（三平台全发）；也支持组合写法，如 <code>akkoma,twitter</code>。</p>
+<p>图片：三平台均支持（饭否 1 张，X ≤4 张，Akkoma ≤16 张；webp 会自动转 jpg 给饭否）。<b>多图分流</b>：同时发且 ≥2 张时，第 1 张发饭否、其余发 Akkoma/X。</p>
+<p>标签：追加给 Akkoma 与 X；<b>饭否帖会自动去掉 #标签</b>。Twitter 正文按权重计 280（中文约 140 字）。</p>
+<h3>带图 + 标签</h3>
 <pre>{"token": "&lt;token&gt;", "text": "正文", "to": "akkoma",
  "tags": ["科技", "日常"],
  "images": [{"name": "a.webp", "mime": "image/webp", "data": "&lt;base64&gt;"}]}</pre>
