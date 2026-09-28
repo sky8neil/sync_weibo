@@ -40,7 +40,7 @@ $ python3 fanfou_sender.py send "你好饭否"
 OK id=SUogSNaFJyY verified=yes | 信息需要审核，通过后即将发出
 
 $ python3 fanfou_sender.py selftest
-1) 会话 OK：变换角色 (https://fanfou.com/~5kRwNCD-BEU)
+1) 会话 OK：徐要休息 (https://fanfou.com/xneil)
 2) 发送 OK：id=rXvAwj20VOQ verified=True | 信息需要审核，通过后即将发出
 3) 删除 OK：gone=True | 信息删除成功！
 自检通过 ✔

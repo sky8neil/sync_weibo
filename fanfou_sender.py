@@ -247,13 +247,16 @@ class FanfouClient:
 
     def ensure_session(self, force: bool = False) -> str:
         """保证拿到一个已登录的 /home 页面 HTML，返回其文本。"""
-        if not self._loaded:
+        if force or self._force_relogin:
+            # force 必须优先于「首次加载」分支，否则新实例上 force=True 会被
+            # load_session 分支吞掉、导致 login --force 实际不重登（曾致账号切换失效）
+            self._loaded = True
+            self.login()
+        elif not self._loaded:
             self._loaded = True
             if not self.load_session():
                 self._log("无本地会话，直接登录")
                 self.login()
-        elif force or self._force_relogin:
-            self.login()
         home = self.s.get(f"{BASE}/home", timeout=self.timeout)
         if not self._logged_in(home.text):
             self._log("本地会话失效，重新登录")
