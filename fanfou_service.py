@@ -371,7 +371,7 @@ class Service:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "multipost-api/3.0"
+    server_version = "fanfoux/3.0"
     protocol_version = "HTTP/1.1"
 
     @property
@@ -421,7 +421,7 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self._path())
         qs = {k: v[-1] for k, v in parse_qs(u.query).items()}
         if u.path == "/health":
-            self._json(200, {"ok": True, "service": "multipost-api"})
+            self._json(200, {"ok": True, "service": "fanfoux"})
             return
         if u.path in ("/send", "/"):
             if qs.get("text"):
@@ -643,10 +643,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 HELP_HTML = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>multipost-api</title>
+<title>fanfoux</title>
 <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:48px auto;padding:0 20px;line-height:1.7}
 code{background:#f4f4f4;padding:2px 6px;border-radius:4px}pre{background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto}</style>
-</head><body><h1>multipost-api 运行中 ✅</h1>
+</head><body><h1>fanfoux 运行中 ✅</h1>
 <p>饭否 + Akkoma 多平台发送接口（供浏览器插件等调用）。</p>
 <h3>纯文本</h3>
 <pre>POST /send
@@ -697,7 +697,7 @@ def main(argv=None) -> int:
     service = Service(a.state_dir, token)
     httpd = ThreadingHTTPServer((a.host, a.port), Handler)
     httpd.service = service  # type: ignore[attr-defined]
-    print(f"multipost-api listening on http://{a.host}:{a.port} (token: {token[:8]}…)", flush=True)
+    print(f"fanfoux listening on http://{a.host}:{a.port} (token: {token[:8]}…)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

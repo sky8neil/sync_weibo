@@ -1,5 +1,5 @@
 [Unit]
-Description=Multipost API (fanfou + akkoma + twitter HTTP service)
+Description=fanfoux — multipost HTTP service (fanfou + akkoma + twitter)
 After=network-online.target
 Wants=network-online.target
 

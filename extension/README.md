@@ -26,7 +26,7 @@
 
 点插件图标 → 右下角「设置 ⚙」：
 
-- **服务地址**：`http://199.47.241.134:8788`（已部署在 8c12g，systemd 服务 `multipost-api`，开机自启）
+- **服务地址**：`http://199.47.241.134:8788`（已部署在 8c12g，systemd 服务 `fanfoux`，开机自启）
 - **Token**：服务器上 `/home/fanfou-sender/state/service_token.txt` 的内容
 
 点「保存」，再点「测试连接」，应显示饭否 / Akkoma / Twitter 三行账号信息。
